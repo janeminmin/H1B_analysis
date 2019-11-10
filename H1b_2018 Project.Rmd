@@ -1,0 +1,485 @@
+---
+title: "H1b_2018 Project"
+date: "October 25, 2019"
+output: html_document
+---
+```{r}
+library(tidyverse)
+h1b<-read_csv("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/h1b18.csv")
+summary(h1b)
+```
+```{r}
+glimpse(h1b)
+```
+
+```{r}
+# dataset is already tidy
+sapply(h1b, function(x) length(unique(x)))
+## 
+```
+
+```{r}
+# put date columns into standard format
+datelist<-list("CASE_SUBMITTED","DECISION_DATE","EMPLOYMENT_START_DATE","EMPLOYMENT_END_DATE")
+for (i in datelist){
+    dateformat<-format(strptime(pull(h1b[,i]),"%m/%d/%Y"),"%Y-%m-%d")
+    substr(dateformat,1,2)<-"20" 
+    h1b[,i]<-dateformat
+} 
+head(h1b)
+```
+
+```{r}
+# clear SOC_NAME column
+SOC<-h1b%>%
+        filter(!is.na(SOC_NAME))%>%
+        group_by(SOC_CODE)%>%
+        summarise(Name=names(which.max(table(SOC_NAME))))%>%
+        filter(!str_detect(Name, '-'))
+
+h1b<-h1b%>%
+        left_join(SOC,by="SOC_CODE")%>%
+        left_join(SOC,by=c("Name"="SOC_CODE"))%>%
+        mutate(SOC_NAME=ifelse(str_detect(Name, '-'),Name.y,Name))
+```
+
+```{r}
+# analysis for wage
+h1b %>% filter(PW_UNIT_OF_PAY!=WAGE_UNIT_OF_PAY) %>%
+        select(PREVAILING_WAGE, PW_UNIT_OF_PAY,WAGE_RATE_OF_PAY_FROM,WAGE_UNIT_OF_PAY)
+# found errors in PW_UNIT_OF_PAY&WAGE_UNIT_OF_PAY
+```
+
+```{r}
+as.data.frame(table(h1b$WAGE_UNIT_OF_PAY))
+# most cases are paid yearly
+```
+
+```{r}
+## create a column to replace the column WAGE_RATE_OF_PAY_FROM and WAGE_RATE_OF_PAY_TO
+h1b<-h1b %>% 
+        mutate(WAGE_UNIT_OF_PAY_MEAN=ifelse(WAGE_RATE_OF_PAY_TO==0,WAGE_RATE_OF_PAY_FROM,
+                                            (WAGE_RATE_OF_PAY_FROM+WAGE_RATE_OF_PAY_TO)/2))
+head(h1b)
+```
+
+```{r}
+# yearly wage, use xlim to limit outliers
+h1b %>%
+        gather(PREVAILING_WAGE,WAGE_UNIT_OF_PAY_MEAN,key="WAGE",value="DOLLAR") %>%
+        filter(WAGE_UNIT_OF_PAY=="Year",WAGE_UNIT_OF_PAY=="Year")%>%
+        ggplot(aes(x=DOLLAR, fill = WAGE))+
+        geom_histogram(alpha = 0.5, aes(y = ..density..), position = 'identity',bins = 200)+
+        xlim(c(1000,320000))
+```
+
+```{r}
+# hourly wage,use xlim to limit outliers
+h1b %>%
+        gather(PREVAILING_WAGE,WAGE_UNIT_OF_PAY_MEAN,key="WAGE",value="DOLLAR") %>%
+        filter(WAGE_UNIT_OF_PAY=="Hour",WAGE_UNIT_OF_PAY=="Hour")%>%
+        ggplot(aes(x=DOLLAR, fill = WAGE))+
+        geom_histogram(alpha = 0.5, aes(y = ..density..), position = 'identity',bins = 200)+
+        xlim(c(0,120))
+```
+
+```{r}
+# analysis for case_status
+h1b%>%
+        group_by(CASE_STATUS)%>%
+        summarise(number=n())%>%
+        ggplot(aes(x=reorder(CASE_STATUS,desc(number)),y=number))+
+        geom_bar(stat="identity",fill="steelblue")+
+        geom_text(aes(label = number),vjust=-0.3, color="black", size=3.5)+
+        xlab("Case Status")+
+        ylab("Number of H1b petitions")
+```
+
+```{r}
+prop_mean<-as.data.frame(matrix(0,nrow=4,ncol=2))
+names(prop_mean)<-c("CASE_STATUS","Proportion")
+prop_mean$CASE_STATUS[1]<-"CERTIFIED"
+prop_mean$Proportion[1]<-nrow(subset(h1b,CASE_STATUS=="CERTIFIED"))/nrow(h1b)
+
+prop_mean$CASE_STATUS[2]<-"CERTIFIED-WITHDRAWN"
+prop_mean$Proportion[2]<-nrow(subset(h1b,CASE_STATUS=="CERTIFIED-WITHDRAWN"))/nrow(h1b)
+
+prop_mean$CASE_STATUS[3]<-"WITHDRAWN"
+prop_mean$Proportion[3]<-nrow(subset(h1b,CASE_STATUS=="WITHDRAWN"))/nrow(h1b)
+
+prop_mean$CASE_STATUS[4]<-"DENIED"
+prop_mean$Proportion[4]<-nrow(subset(h1b,CASE_STATUS=="DENIED"))/nrow(h1b)
+
+prop_mean%>%
+        ggplot(aes(x=reorder(CASE_STATUS,desc(Proportion)),y=Proportion,group=1))+
+        geom_point(color="red",size=3)+
+        geom_line(color="red",size=2)+
+        geom_text(aes(label=paste0(round(Proportion*100,2),"%")),vjust=-0.4, color="black", size=3.5)+
+        ylim(0,1)+
+        xlab("Case Status")+
+        ylab("Mean of proportion based on case status")
+
+```
+
+```{r}
+# analysis for position type
+# the majority is full time position, PIE chart
+iffulltime<-h1b %>% 
+        filter(!is.na(FULL_TIME_POSITION))%>%
+        group_by(FULL_TIME_POSITION) %>%
+        summarize(NUMBER=n()) %>%
+        mutate(PERCENTAGE=paste0(round(100 * NUMBER/sum(NUMBER), 2), "%"),
+               POSITION = cumsum(NUMBER) - NUMBER/2)
+# PIE chart
+ggplot(iffulltime, aes(x = factor(1), y = NUMBER, fill = FULL_TIME_POSITION)) + 
+    geom_bar(width = 1, stat = "identity", color = "grey") +
+    coord_polar(theta = "y") +
+    geom_text(aes(x = factor(1),y=POSITION,label = PERCENTAGE),color="white", size=5) +
+    theme_void()
+```
+
+```{r}
+# analysis for H1B application quantity
+# the top 5 city in amount of H1B application
+city_5<-h1b %>% 
+        filter(!is.na(EMPLOYER_CITY),!is.na(EMPLOYER_STATE))%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE) %>%
+        summarize(AMOUNT=n()) %>%
+        arrange(desc(AMOUNT)) %>%
+        head(5)
+city_5
+```
+
+```{r}
+h1b %>%
+        filter(EMPLOYER_CITY %in% c("NEW YORK", "CHICAGO","PHILADELPHIA","PLANO","ROCKVILLE"))%>%
+        group_by(EMPLOYER_CITY,CASE_STATUS)%>%
+        summarise(number=n())%>%
+        left_join(city_5,by="EMPLOYER_CITY")%>%
+        mutate(proportion=number/AMOUNT)%>%
+        ggplot(aes(x=EMPLOYER_CITY,y=proportion,fill=CASE_STATUS,label = paste0(round(proportion*100,1),"%")))+
+        geom_bar(stat="identity")+
+        geom_text(position = position_stack(vjust = 0.5),color="white", size=3.5)+
+        coord_flip()
+# NEW YORK's certified rate is lower than the national level 88.55%. It has highest certified-withdrawn rate, which shows high staff mobility in this city.
+```
+
+```{r}
+# stats of yearly wage in these 5 cities
+h1b %>%
+        filter(WAGE_UNIT_OF_PAY=="Year",WAGE_UNIT_OF_PAY=="Year",EMPLOYER_CITY %in% c("NEW YORK", "CHICAGO","PHILADELPHIA","PLANO","ROCKVILLE"), between(WAGE_UNIT_OF_PAY_MEAN,1000,320000))%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE) %>%
+        ggplot( ) +
+        geom_boxplot(aes(x=EMPLOYER_CITY, y=WAGE_UNIT_OF_PAY_MEAN,fill=EMPLOYER_CITY)) +
+        theme(legend.position="none")+
+        coord_flip()
+```
+
+```{r}
+# wordcloud for job_title
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+# Load the data as a corpus
+docs <- Corpus(VectorSource(h1b$SOC_NAME))
+#remove special characters from the text.
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+docs <- tm_map(docs, toSpace, "/")
+docs <- tm_map(docs, toSpace, "-")
+docs <- tm_map(docs, toSpace, "\\(")
+docs <- tm_map(docs, toSpace, "\\)")
+docs <- tm_map(docs, toSpace, ",")
+docs <- tm_map(docs, toSpace, "\\d")
+docs <- tm_map(docs, toSpace, "ALL")
+docs <- tm_map(docs, toSpace, "OTHER")
+docs <- tm_map(docs, toSpace, "AND")
+
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Build a term-document matrix
+dtm <- TermDocumentMatrix(docs)
+memory.limit(size=50000)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+# Build a term-document matrix
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=180, random.order=FALSE, rot.per=0.15, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+```{r}
+# Top 5 occupations
+occup_5<-h1b %>%
+        filter(!is.na(SOC_NAME)) %>%
+        group_by(SOC_NAME) %>%
+        summarise(AMOUNT = n()) %>%
+        arrange(desc(AMOUNT)) %>%
+        head(5)
+occup_5
+```
+
+```{r}
+h1b %>%
+        filter(SOC_NAME %in% c("SOFTWARE DEVELOPERS, APPLICATIONS", "COMPUTER OCCUPATIONS, ALL OTHER","COMPUTER SYSTEMS ANALYSTS","SOFTWARE DEVELOPERS, SYSTEMS SOFTWARE","COMPUTER PROGRAMMERS"))%>%
+        group_by(SOC_NAME,CASE_STATUS)%>%
+        summarise(number=n())%>%
+        left_join(occup_5,by="SOC_NAME")%>%
+        mutate(proportion=number/AMOUNT)%>%
+        ggplot(aes(x=SOC_NAME,y=proportion,fill=CASE_STATUS,label = paste0(round(proportion*100,1),"%")))+
+        geom_bar(stat="identity")+
+        geom_text(position = position_stack(vjust = 0.5),color="white", size=3.5)+
+        coord_flip()
+# computer systems analysts and computer programmers's certified rate are lower than the national level 88.55%
+# The two also have higher withdrawn/c-w rates, especially for computer programmers, shows high staff mobility and staff's mixed background in this industry.
+```
+
+```{r}
+# study of computer programmers' certificated-withdrawn and withdrawn rate
+# number of application for computer programmers in each city
+cp_number<-h1b %>% 
+        filter(!is.na(EMPLOYER_CITY),!is.na(EMPLOYER_STATE),SOC_NAME=="COMPUTER PROGRAMMERS")%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE) %>%
+        summarize(cp_nb=n())
+# the proportion of computer programmers in all h1b applicants in each city
+prop_cp<-h1b %>% 
+        filter(!is.na(EMPLOYER_CITY),!is.na(EMPLOYER_STATE))%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE) %>%
+        summarize(AMOUNT=n()) %>%
+        inner_join(cp_number,by=c("EMPLOYER_CITY","EMPLOYER_STATE"))%>%
+        mutate(proportion_city=cp_nb/AMOUNT)
+
+# the number of withdrawn/certified-withdrawn cases in each city
+w_number<-h1b %>% 
+        filter(!is.na(EMPLOYER_CITY),!is.na(EMPLOYER_STATE),CASE_STATUS %in% c("CERTIFIED-WITHDRAWN","WITHDRAWN"))%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE) %>%
+        summarize(w_nb=n())
+# the proportion of computer programmers in withdrawn/certified-withdrawn cases in each city
+prop_cp_w<-h1b %>% 
+        filter(!is.na(EMPLOYER_CITY),!is.na(EMPLOYER_STATE),CASE_STATUS %in% c("CERTIFIED-WITHDRAWN","WITHDRAWN"),
+               SOC_NAME=="COMPUTER PROGRAMMERS")%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE) %>%
+        summarize(w_cp_nb=n())%>%
+        inner_join(w_number,by=c("EMPLOYER_CITY","EMPLOYER_STATE"))%>%
+        mutate(proportion_cp=w_cp_nb/w_nb)%>%
+        inner_join(prop_cp,by=c("EMPLOYER_CITY","EMPLOYER_STATE"))%>%
+        select(proportion_city,proportion_cp)
+
+ggplot(prop_cp_w,aes(x=proportion_city,y=proportion_cp))+
+        geom_point() +
+        geom_smooth()+
+        geom_abline(slope=1,intercept = 0,color="red",size=1)
+
+# Referring to the diagonal line(slop==1, red), I find the smoothing line of the data above the diagonal line. It indicates an overrepresentation of computer programmers in withdrawn/certified-withdrawn cases. 
+
+```
+
+```{r}
+# stats of yearly wage in these 5 occupations
+h1b %>%
+        filter(WAGE_UNIT_OF_PAY=="Year",WAGE_UNIT_OF_PAY=="Year",SOC_NAME %in% c("SOFTWARE DEVELOPERS, APPLICATIONS", "COMPUTER OCCUPATIONS, ALL OTHER","COMPUTER SYSTEMS ANALYSTS","SOFTWARE DEVELOPERS, SYSTEMS SOFTWARE","COMPUTER PROGRAMMERS"), between(WAGE_UNIT_OF_PAY_MEAN,1000,320000))%>%
+        ggplot( ) +
+        geom_boxplot(aes(x=SOC_NAME, y=WAGE_UNIT_OF_PAY_MEAN,fill=SOC_NAME)) +
+        theme(legend.position="none")+
+        coord_flip()
+```
+
+```{r}
+# mosaic plot to show number of case in top 5 cities and top 5 occupations.
+library(ggmosaic)
+h1b %>%
+        filter(EMPLOYER_CITY %in% c("NEW YORK", "CHICAGO","PHILADELPHIA","PLANO","ROCKVILLE"), SOC_NAME %in% c("SOFTWARE DEVELOPERS, APPLICATIONS", "COMPUTER OCCUPATIONS, ALL OTHER","COMPUTER SYSTEMS ANALYSTS","SOFTWARE DEVELOPERS, SYSTEMS SOFTWARE","COMPUTER PROGRAMMERS"))%>%
+        ggplot()+
+        geom_mosaic(aes(x = product(SOC_NAME,EMPLOYER_CITY), fill=SOC_NAME), na.rm=TRUE) +
+        theme(legend.position="none",axis.text.x = element_text(angle = 45, hjust = 1))+
+        labs(x = "Top 5 cities", y='Top 5 occupations',title='Mosaic plot of top 5 occupations and top 5 cities')
+```
+
+```{r}
+h1b %>%
+        filter(EMPLOYER_CITY %in% c("NEW YORK", "CHICAGO","PHILADELPHIA","PLANO","ROCKVILLE"), SOC_NAME %in% c("SOFTWARE DEVELOPERS, APPLICATIONS", "COMPUTER OCCUPATIONS, ALL OTHER","COMPUTER SYSTEMS ANALYSTS","SOFTWARE DEVELOPERS, SYSTEMS SOFTWARE","COMPUTER PROGRAMMERS"),WAGE_UNIT_OF_PAY=="Year",WAGE_UNIT_OF_PAY=="Year",between(WAGE_UNIT_OF_PAY_MEAN,1000,320000))%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE,SOC_NAME)%>%
+        summarize(money=mean(WAGE_UNIT_OF_PAY_MEAN))%>%
+        ggplot()+
+        geom_tile(aes(x = EMPLOYER_CITY,y=SOC_NAME, fill=money), na.rm=TRUE) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+        labs(x = "Top 5 cities", y='Top 5 occupations',title='Wage heatmap of top 5 occupations and top 5 cities')
+```
+
+```{r}
+# Top 5 employers in number of H1B applications
+h1b_employers<-h1b %>%
+        group_by(EMPLOYER_NAME) %>%
+        summarise(AMOUNT = n()) %>%
+        arrange(desc(AMOUNT)) %>%
+        head(5)
+h1b_employers
+```
+
+```{r}
+# number of each case status of these companies
+h1b %>%
+        filter(EMPLOYER_NAME %in% c("DELOITTE CONSULTING LLP", "TATA CONSULTANCY SERVICES LIMITED","INFOSYS LIMITED","COGNIZANT TECHNOLOGY SOLUTIONS US CORP","ERNST & YOUNG U.S. LLP"))%>%
+        group_by(EMPLOYER_NAME,CASE_STATUS)%>%
+        summarise(number=n())%>%
+        filter(!CASE_STATUS=="CERTIFIED")%>%
+        ggplot(aes(x=EMPLOYER_NAME,y=number,group=CASE_STATUS,color=CASE_STATUS)) +
+        geom_point(size=2)+
+        geom_line(size=2)+
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# number of each case status of these companies
+h1b %>%
+        filter(EMPLOYER_NAME %in% c("DELOITTE CONSULTING LLP", "TATA CONSULTANCY SERVICES LIMITED","INFOSYS LIMITED","COGNIZANT TECHNOLOGY SOLUTIONS US CORP","ERNST & YOUNG U.S. LLP"))%>%
+        group_by(EMPLOYER_NAME,CASE_STATUS)%>%
+        summarise(number=n())%>%
+        left_join(h1b_employers,by="EMPLOYER_NAME")%>%
+        mutate(proportion=number/AMOUNT)%>%
+        ggplot(aes(x=EMPLOYER_NAME,y=proportion,fill=CASE_STATUS,label = paste0(round(proportion*100,1),"%")))+
+        geom_bar(stat="identity")+
+        geom_text(position = position_stack(vjust = 0.5),color="white", size=3.5)+
+        coord_flip()
+```
+
+```{r}
+# Study relationship between population and amount of h1b applications.
+# city/town based
+
+headers <- read.csv("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/PEP_2018_PEPANNRSIP.US12A_with_ann.csv", header = FALSE, nrows = 2, as.is = T)
+
+population<-read.csv("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/PEP_2018_PEPANNRSIP.US12A_with_ann.csv",header=FALSE,skip=2)
+
+colnames(population)<- headers[1,]
+names(population)[8]<-"city_state"
+```
+
+```{r}
+population<-population%>%
+        mutate(city_state=toupper(city_state))%>%
+        separate(city_state , into=c("city", "state"), sep=", ")%>%
+        select(city,state,respop72018)
+```
+
+```{r}
+library(stringr)
+population<-population%>%
+        mutate(city=str_replace_all(city," CITY",""),
+               city=str_replace_all(city," TOWN",""),
+               city=str_replace_all(city," VILLEGE",""))
+names(state.abb)<-toupper(state.name)
+population$state2<-state.abb[population$state]
+population[which(population$state=="DISTRICT OF COLUMBIA"),"state2"]<-"DC"
+```
+
+```{r}
+find_city<-h1b%>%
+        left_join(population,by=c("EMPLOYER_CITY" = "city", "EMPLOYER_STATE" = "state2"))%>%
+        filter(!is.na(state))%>%
+        select(EMPLOYER_CITY,EMPLOYER_STATE,respop72018)
+
+find_city%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE)%>%
+        summarise(count=n(),population=mean(respop72018))%>%
+        ggplot(aes(x=count,y=population/10000))+
+        geom_point() +
+        geom_smooth()
+
+# The larger a city/town's population, the more opportunities for alien employees. Especially in megalopolis, the demand for alien employees shoots up.
+```
+
+```{r}
+# state based
+library(readxl)
+pop_state <- read_excel("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/nst-est2018-01.xlsx", skip=8)
+pop_state<-pop_state[1:51,-2:-11]
+names(pop_state)<-c("state","population18")
+pop_state<-pop_state%>%
+        mutate(state=toupper(str_sub(state,start=2)))
+pop_state$state2<-state.abb[pop_state$state]
+pop_state[which(pop_state$state=="DISTRICT OF COLUMBIA"),"state2"]<-"DC"
+
+
+state_based<-h1b %>% 
+        filter(!is.na(EMPLOYER_STATE))%>%
+        group_by(EMPLOYER_STATE) %>%
+        summarize(AMOUNT=n()) %>%
+        arrange(desc(AMOUNT))%>%
+        left_join(pop_state,by=c("EMPLOYER_STATE"="state2"))%>%
+        filter(!is.na(state))
+
+# save for tableau visualization
+write.csv(state_based,"C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/state_pop_h1b.csv", row.names = FALSE)
+
+ggplot(state_based,aes(x=AMOUNT,y=population18/10000))+
+        geom_point() +
+        geom_smooth()
+# similar to the above scatter plot, and similar conclusion
+```
+
+```{r}
+# study for processing time
+day_study<-h1b%>%
+        filter(!is.na(CASE_SUBMITTED),!is.na(DECISION_DATE),!is.na(EMPLOYMENT_START_DATE))%>%
+        mutate(process_day=as.integer(as.Date(DECISION_DATE)-as.Date(CASE_SUBMITTED)),
+               margin_day=as.integer(as.Date(EMPLOYMENT_START_DATE)-as.Date(DECISION_DATE)))%>%
+        select(CASE_STATUS,process_day,margin_day)
+
+# visualize processing days of each case status
+# too much outliers, limited y axis
+ggplot(day_study) +
+        geom_boxplot(aes(x=CASE_STATUS, y=process_day,fill=CASE_STATUS)) +
+        ylim(c(0,20))+
+        theme(legend.position="none")
+```
+
+```{r}
+# visualize margin days between desicion date and start date of each case status
+ggplot(day_study) +
+        geom_boxplot(aes(x=CASE_STATUS, y=margin_day,fill=CASE_STATUS)) +
+        theme(legend.position="none")
+```
+```{r}
+# study month trend of h1b applications
+library(lubridate)
+month_trend<-h1b %>%
+        filter(!is.na(CASE_SUBMITTED),!is.na(DECISION_DATE),!is.na(EMPLOYMENT_START_DATE))%>%
+        mutate(month_submit=month(CASE_SUBMITTED),
+               month_decision=month(DECISION_DATE),
+               month_start=month(EMPLOYMENT_START_DATE))%>%
+        select(CASE_STATUS,month_submit,month_decision,month_start)
+```
+
+```{r}
+type1<-month_trend%>%
+        group_by(month_submit)%>%
+        summarise(Amount=n())%>%
+        mutate(month=as.factor(month_submit),
+               type="submission")%>%
+        select(month,Amount,type)
+
+type2<-month_trend%>%
+        group_by(month_decision)%>%
+        summarise(Amount=n())%>%
+        mutate(month=as.factor(month_decision),
+               type="decision")%>%
+        select(month,Amount,type)
+
+type3<-month_trend%>%
+        group_by(month_start)%>%
+        summarise(Amount=n())%>%
+        mutate(month=as.factor(month_start),
+               type="start")%>%
+        select(month,Amount,type)
+
+month_lines<-rbind(type1,type2,type3)
+```
+
+```{r}
+ggplot(month_lines,aes(x=month,y=Amount,group=type,color=type))+
+        geom_point( )+
+        geom_line(size=1)+
+        ylab("Number of application")
+```
