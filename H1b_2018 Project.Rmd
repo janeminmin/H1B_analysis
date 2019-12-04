@@ -5,7 +5,7 @@ output: html_document
 ---
 ```{r}
 library(tidyverse)
-h1b<-read_csv("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/h1b18.csv")
+h1b<-read_csv("h1b18.csv")
 summary(h1b)
 ```
 ```{r}
@@ -70,7 +70,9 @@ h1b %>%
         filter(WAGE_UNIT_OF_PAY=="Year",WAGE_UNIT_OF_PAY=="Year")%>%
         ggplot(aes(x=DOLLAR, fill = WAGE))+
         geom_histogram(alpha = 0.5, aes(y = ..density..), position = 'identity',bins = 200)+
-        xlim(c(1000,320000))
+        xlim(c(1000,320000))+
+        labs(x = "Dollars", y='Density',title='Yearly wage distributions')
+ggsave("Yearly wage distributions.jpeg", width=10, height=5)
 ```
 
 ```{r}
@@ -80,7 +82,9 @@ h1b %>%
         filter(WAGE_UNIT_OF_PAY=="Hour",WAGE_UNIT_OF_PAY=="Hour")%>%
         ggplot(aes(x=DOLLAR, fill = WAGE))+
         geom_histogram(alpha = 0.5, aes(y = ..density..), position = 'identity',bins = 200)+
-        xlim(c(0,120))
+        xlim(c(0,120))+
+        labs(x = "Dollars", y='Density',title='Hourly wage distributions')
+ggsave("Hourly wage distributions.jpeg", width=10, height=5)
 ```
 
 ```{r}
@@ -89,10 +93,10 @@ h1b%>%
         group_by(CASE_STATUS)%>%
         summarise(number=n())%>%
         ggplot(aes(x=reorder(CASE_STATUS,desc(number)),y=number))+
-        geom_bar(stat="identity",fill="steelblue")+
-        geom_text(aes(label = number),vjust=-0.3, color="black", size=3.5)+
-        xlab("Case Status")+
-        ylab("Number of H1b petitions")
+        geom_col(fill="steelblue")+
+        geom_label(aes(label = number), color = "black", hjust =0.5) +
+        labs(x = "Case Status", y="Number of H1b petitions",title="Case status frequencies bar chart")
+ggsave("Case Status bar chart.jpeg", width=10, height=5)
 ```
 
 ```{r}
@@ -113,12 +117,11 @@ prop_mean$Proportion[4]<-nrow(subset(h1b,CASE_STATUS=="DENIED"))/nrow(h1b)
 prop_mean%>%
         ggplot(aes(x=reorder(CASE_STATUS,desc(Proportion)),y=Proportion,group=1))+
         geom_point(color="red",size=3)+
-        geom_line(color="red",size=2)+
+        geom_line(lty = 2,color="red")+
         geom_text(aes(label=paste0(round(Proportion*100,2),"%")),vjust=-0.4, color="black", size=3.5)+
         ylim(0,1)+
-        xlab("Case Status")+
-        ylab("Mean of proportion based on case status")
-
+        labs(x = "Case Status", y="Proportion mean based on case status",title="Case status frequency proportions plot")
+ggsave("Mean proportion of case status.jpeg", width=10, height=5)
 ```
 
 ```{r}
@@ -135,11 +138,20 @@ ggplot(iffulltime, aes(x = factor(1), y = NUMBER, fill = FULL_TIME_POSITION)) +
     geom_bar(width = 1, stat = "identity", color = "grey") +
     coord_polar(theta = "y") +
     geom_text(aes(x = factor(1),y=POSITION,label = PERCENTAGE),color="white", size=5) +
+    labs(title="If full-time position pie chart")+
     theme_void()
+ggsave("If full time position pie chart.jpeg", width=10, height=5)
 ```
 
 ```{r}
 # analysis for H1B application quantity
+# clean EMPLOYER_CITY
+h1b<-h1b%>%mutate(EMPLOYER_CITY=str_replace_all(EMPLOYER_CITY,pattern="\\,.*$",replacement=""),
+                  EMPLOYER_CITY=str_replace_all(EMPLOYER_CITY," CITY",""),
+                  EMPLOYER_CITY=str_replace_all(EMPLOYER_CITY," TOWN",""),
+                  EMPLOYER_CITY=str_replace_all(EMPLOYER_CITY," VILLEGE",""),
+                  EMPLOYER_CITY=str_trim(EMPLOYER_CITY))
+
 # the top 5 city in amount of H1B application
 city_5<-h1b %>% 
         filter(!is.na(EMPLOYER_CITY),!is.na(EMPLOYER_STATE))%>%
@@ -160,7 +172,9 @@ h1b %>%
         ggplot(aes(x=EMPLOYER_CITY,y=proportion,fill=CASE_STATUS,label = paste0(round(proportion*100,1),"%")))+
         geom_bar(stat="identity")+
         geom_text(position = position_stack(vjust = 0.5),color="white", size=3.5)+
-        coord_flip()
+        coord_flip()+
+        labs(x = "City of employer", y="Proportion of each case status",title="Proportions of case status in top 5 cities")
+ggsave("Proportion of case status in top 5 cities.jpeg", width=10, height=5)
 # NEW YORK's certified rate is lower than the national level 88.55%. It has highest certified-withdrawn rate, which shows high staff mobility in this city.
 ```
 
@@ -172,41 +186,47 @@ h1b %>%
         ggplot( ) +
         geom_boxplot(aes(x=EMPLOYER_CITY, y=WAGE_UNIT_OF_PAY_MEAN,fill=EMPLOYER_CITY)) +
         theme(legend.position="none")+
-        coord_flip()
+        coord_flip()+
+        labs(x = "City of employer", y="Wage paid in dollars",title="Wage paid boxplot in top 5 cities")
+ggsave("Wage paid distributions in top 5 cities.jpeg", width=10, height=5)
 ```
 
 ```{r}
 # wordcloud for job_title
-library("tm")
-library("SnowballC")
-library("wordcloud")
-library("RColorBrewer")
-# Load the data as a corpus
-docs <- Corpus(VectorSource(h1b$SOC_NAME))
-#remove special characters from the text.
-toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
-docs <- tm_map(docs, toSpace, "/")
-docs <- tm_map(docs, toSpace, "-")
-docs <- tm_map(docs, toSpace, "\\(")
-docs <- tm_map(docs, toSpace, "\\)")
-docs <- tm_map(docs, toSpace, ",")
-docs <- tm_map(docs, toSpace, "\\d")
-docs <- tm_map(docs, toSpace, "ALL")
-docs <- tm_map(docs, toSpace, "OTHER")
-docs <- tm_map(docs, toSpace, "AND")
+library(tidytext)
+library(wordcloud)
 
-# Convert the text to lower case
-docs <- tm_map(docs, content_transformer(tolower))
-# Build a term-document matrix
-dtm <- TermDocumentMatrix(docs)
-memory.limit(size=50000)
-m <- as.matrix(dtm)
-v <- sort(rowSums(m),decreasing=TRUE)
-d <- data.frame(word = names(v),freq=v)
-# Build a term-document matrix
-wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+tidy_soc<-h1b%>%
+        unnest_tokens(word, SOC_NAME)%>%
+        count(word, sort=TRUE)%>%
+        filter(!word %in% stop_words$word)
+
+wordcloud(words = tidy_soc$word, freq = tidy_soc$n, min.freq = 1,
           max.words=180, random.order=FALSE, rot.per=0.15, 
-          colors=brewer.pal(8, "Dark2"))
+          colors=brewer.pal(8, "Dark2"),scale=c(2,0.3)) 
+```
+
+```{r}
+# Create a graph from bigrams
+library(igraph)
+library(ggraph)
+
+soc_graph<-h1b%>%
+        unnest_tokens(bigram, SOC_NAME, token = "ngrams", n = 2)%>%
+        select(bigram)%>%
+        separate(bigram, c("word1", "word2"), sep = " ")%>%
+        filter(!word1 %in% stop_words$word) %>%
+        filter(!word2 %in% stop_words$word)%>%
+        count(word1, word2, sort=TRUE) %>%
+        filter(n > 1000) %>%
+        graph_from_data_frame()
+
+ggraph(soc_graph,layout="igraph",algorithm="kk") +
+        geom_edge_link() +
+        geom_node_point() +
+        geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+       
+ggsave("Bigram graph of soc_name.jpeg", width=10, height=5)       
 ```
 
 ```{r}
@@ -230,7 +250,9 @@ h1b %>%
         ggplot(aes(x=SOC_NAME,y=proportion,fill=CASE_STATUS,label = paste0(round(proportion*100,1),"%")))+
         geom_bar(stat="identity")+
         geom_text(position = position_stack(vjust = 0.5),color="white", size=3.5)+
-        coord_flip()
+        coord_flip()+
+        labs(x = "Job category", y="Proportion of each case status",title="Proportions of case status in top 5 occupations")
+ggsave("Proportion of case status in top 5 occupations.jpeg", width=10, height=5)
 # computer systems analysts and computer programmers's certified rate are lower than the national level 88.55%
 # The two also have higher withdrawn/c-w rates, especially for computer programmers, shows high staff mobility and staff's mixed background in this industry.
 ```
@@ -267,9 +289,14 @@ prop_cp_w<-h1b %>%
         select(proportion_city,proportion_cp)
 
 ggplot(prop_cp_w,aes(x=proportion_city,y=proportion_cp))+
-        geom_point() +
+        geom_point(color="orange",size=2,alpha=0.5) +
         geom_smooth()+
-        geom_abline(slope=1,intercept = 0,color="red",size=1)
+        geom_abline(slope=1,intercept = 0,color="green",size=1)+
+        labs(x = "Proportion of computer programmers in all h1b applicants", y="Proportion of computer
+             programmers in withdrawn/certified-withdrawn cases",title='Proportion study for computer programmers in
+             withdraw/certified-withdrawn cases in each city')
+ggsave("Proportion study for computer programmers withdraw_certified-withdrawn.jpeg", 
+       width=10, height=5)
 
 # Referring to the diagonal line(slop==1, red), I find the smoothing line of the data above the diagonal line. It indicates an overrepresentation of computer programmers in withdrawn/certified-withdrawn cases. 
 
@@ -282,7 +309,9 @@ h1b %>%
         ggplot( ) +
         geom_boxplot(aes(x=SOC_NAME, y=WAGE_UNIT_OF_PAY_MEAN,fill=SOC_NAME)) +
         theme(legend.position="none")+
-        coord_flip()
+        coord_flip()+
+        labs(x = "Job category", y="Wage paid in dollars",title="Wage paid boxplot in top 5 occupations")
+ggsave("wage paid distributions of top 5 job categories.jpeg", width=10, height=5)
 ```
 
 ```{r}
@@ -292,8 +321,9 @@ h1b %>%
         filter(EMPLOYER_CITY %in% c("NEW YORK", "CHICAGO","PHILADELPHIA","PLANO","ROCKVILLE"), SOC_NAME %in% c("SOFTWARE DEVELOPERS, APPLICATIONS", "COMPUTER OCCUPATIONS, ALL OTHER","COMPUTER SYSTEMS ANALYSTS","SOFTWARE DEVELOPERS, SYSTEMS SOFTWARE","COMPUTER PROGRAMMERS"))%>%
         ggplot()+
         geom_mosaic(aes(x = product(SOC_NAME,EMPLOYER_CITY), fill=SOC_NAME), na.rm=TRUE) +
-        theme(legend.position="none",axis.text.x = element_text(angle = 45, hjust = 1))+
-        labs(x = "Top 5 cities", y='Top 5 occupations',title='Mosaic plot of top 5 occupations and top 5 cities')
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+        labs(x = "Top 5 cities", y="Top 5 occupations",title="Mosaic plot of top 5 occupations and top 5 cities")
+ggsave("Mosaic plot of top 5 occupations and top 5 cities.jpeg", width=10, height=5)
 ```
 
 ```{r}
@@ -304,7 +334,8 @@ h1b %>%
         ggplot()+
         geom_tile(aes(x = EMPLOYER_CITY,y=SOC_NAME, fill=money), na.rm=TRUE) +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-        labs(x = "Top 5 cities", y='Top 5 occupations',title='Wage heatmap of top 5 occupations and top 5 cities')
+        labs(x = "Top 5 cities", y="Top 5 occupations",title="Wage heatmap of top 5 occupations and top 5 cities")
+ggsave("Wage heatmap of top 5 occupations and top5 cities.jpeg",width=10, height=5)
 ```
 
 ```{r}
@@ -323,11 +354,18 @@ h1b %>%
         filter(EMPLOYER_NAME %in% c("DELOITTE CONSULTING LLP", "TATA CONSULTANCY SERVICES LIMITED","INFOSYS LIMITED","COGNIZANT TECHNOLOGY SOLUTIONS US CORP","ERNST & YOUNG U.S. LLP"))%>%
         group_by(EMPLOYER_NAME,CASE_STATUS)%>%
         summarise(number=n())%>%
+        mutate(total=1,
+               total=ifelse(EMPLOYER_NAME=="TATA CONSULTANCY SERVICES LIMITED",2,total),
+               total=ifelse(EMPLOYER_NAME=="INFOSYS LIMITED",3,total),
+               total=ifelse(EMPLOYER_NAME=="COGNIZANT TECHNOLOGY SOLUTIONS US CORP",4,total),
+               total=ifelse(EMPLOYER_NAME=="ERNST & YOUNG U.S. LLP",5,total))%>%
         filter(!CASE_STATUS=="CERTIFIED")%>%
-        ggplot(aes(x=EMPLOYER_NAME,y=number,group=CASE_STATUS,color=CASE_STATUS)) +
+        ggplot(aes(x=reorder(EMPLOYER_NAME,total),y=number,group=CASE_STATUS,color=CASE_STATUS)) +
         geom_point(size=2)+
-        geom_line(size=2)+
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        geom_line(lty = 2)+
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+        labs(x="Top 5 most H1B sponsored employers names", y = "Number of petitions", title="Other case status in top 5 companies")
+ggsave("Other case status in top 5 companies.jpeg",width=10, height=5)
 ```
 
 ```{r}
@@ -341,16 +379,18 @@ h1b %>%
         ggplot(aes(x=EMPLOYER_NAME,y=proportion,fill=CASE_STATUS,label = paste0(round(proportion*100,1),"%")))+
         geom_bar(stat="identity")+
         geom_text(position = position_stack(vjust = 0.5),color="white", size=3.5)+
-        coord_flip()
+        coord_flip()+
+        labs(x = "Employer name", y="Proportion of each case status",title="Proportion of case status in top 5 companies")
+ggsave("Proportion of case status in top 5 companies.jpeg",width=10, height=5)
 ```
 
 ```{r}
 # Study relationship between population and amount of h1b applications.
 # city/town based
 
-headers <- read.csv("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/PEP_2018_PEPANNRSIP.US12A_with_ann.csv", header = FALSE, nrows = 2, as.is = T)
+headers <- read.csv("PEP_2018_PEPANNRSIP.US12A_with_ann.csv", header = FALSE, nrows = 2, as.is = T)
 
-population<-read.csv("C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/PEP_2018_PEPANNRSIP.US12A_with_ann.csv",header=FALSE,skip=2)
+population<-read.csv("PEP_2018_PEPANNRSIP.US12A_with_ann.csv",header=FALSE,skip=2)
 
 colnames(population)<- headers[1,]
 names(population)[8]<-"city_state"
@@ -368,10 +408,14 @@ library(stringr)
 population<-population%>%
         mutate(city=str_replace_all(city," CITY",""),
                city=str_replace_all(city," TOWN",""),
-               city=str_replace_all(city," VILLEGE",""))
+               city=str_replace_all(city," VILLEGE",""),
+               city=str_trim(city),
+               state=str_trim(state))
+
 names(state.abb)<-toupper(state.name)
 population$state2<-state.abb[population$state]
 population[which(population$state=="DISTRICT OF COLUMBIA"),"state2"]<-"DC"
+population[which(population$city=="ANCHORAGE MUNICIPALITY"),"city"]<-"ANCHORAGE"
 ```
 
 ```{r}
@@ -384,8 +428,10 @@ find_city%>%
         group_by(EMPLOYER_CITY,EMPLOYER_STATE)%>%
         summarise(count=n(),population=mean(respop72018))%>%
         ggplot(aes(x=count,y=population/10000))+
-        geom_point() +
-        geom_smooth()
+        geom_point(color="orange",size=2,alpha=0.5) +
+        geom_smooth()+
+        labs(x = "Number of H1B petitions", y="Population of city (unit 10k)",title="Population vs petitions number in each city")
+ggsave("Population vs petitions number in each city.jpeg",width=10, height=5)
 
 # The larger a city/town's population, the more opportunities for alien employees. Especially in megalopolis, the demand for alien employees shoots up.
 ```
@@ -410,12 +456,20 @@ state_based<-h1b %>%
         left_join(pop_state,by=c("EMPLOYER_STATE"="state2"))%>%
         filter(!is.na(state))
 
+tableau_csv<-find_city%>%
+        group_by(EMPLOYER_CITY,EMPLOYER_STATE)%>%
+        summarise(count=n())%>%
+        left_join(state_based,by="EMPLOYER_STATE")%>%
+        select(-AMOUNT,-EMPLOYER_STATE)
+
 # save for tableau visualization
-write.csv(state_based,"C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/state_pop_h1b.csv", row.names = FALSE)
+write.csv(tableau_csv,"C:/Users/Minjie/Documents/2018 Fall Master/Data visualization/Project/state_city_pop_h1b.csv", row.names = FALSE)
 
 ggplot(state_based,aes(x=AMOUNT,y=population18/10000))+
-        geom_point() +
-        geom_smooth()
+        geom_point(color="orange",size=2,alpha=0.5) +
+        geom_smooth()+
+        labs(x = "Number of H1B petitions", y="Population of state (unit 10k)",title="Population vs petitions number in each state")
+ggsave("Population vs petitions number in each state.jpeg",width=10, height=5)
 # similar to the above scatter plot, and similar conclusion
 ```
 
@@ -432,14 +486,18 @@ day_study<-h1b%>%
 ggplot(day_study) +
         geom_boxplot(aes(x=CASE_STATUS, y=process_day,fill=CASE_STATUS)) +
         ylim(c(0,20))+
-        theme(legend.position="none")
+        theme(legend.position="none")+
+        labs(x = "Case status", y="Processing days",title="Processing days boxplot based on case status")
+ggsave("Processing days versus case status.jpeg",width=10, height=5)
 ```
 
 ```{r}
 # visualize margin days between desicion date and start date of each case status
 ggplot(day_study) +
         geom_boxplot(aes(x=CASE_STATUS, y=margin_day,fill=CASE_STATUS)) +
-        theme(legend.position="none")
+        theme(legend.position="none")+
+        labs(x = "Case status", y="Margin days between desicion date and visa start date",title="Margin days boxplot based on case status")
+ggsave("Margin days vs case status.jpeg",width=10, height=5)
 ```
 ```{r}
 # study month trend of h1b applications
@@ -449,7 +507,7 @@ month_trend<-h1b %>%
         mutate(month_submit=month(CASE_SUBMITTED),
                month_decision=month(DECISION_DATE),
                month_start=month(EMPLOYMENT_START_DATE))%>%
-        select(CASE_STATUS,month_submit,month_decision,month_start)
+        select(CASE_STATUS,month_submit,month_decision,month_start,EMPLOYER_STATE,SOC_NAME)
 ```
 
 ```{r}
@@ -479,7 +537,109 @@ month_lines<-rbind(type1,type2,type3)
 
 ```{r}
 ggplot(month_lines,aes(x=month,y=Amount,group=type,color=type))+
-        geom_point( )+
-        geom_line(size=1)+
-        ylab("Number of application")
+        geom_point(size=2)+
+        geom_line(lty = 2)+
+        labs(x = "Month", y="Number of petitions", title="Monthly trend multiple lines plot")
+ggsave("Monthly lines of related dates.jpeg",width=10, height=5)
 ```
+
+```{r}
+# class small soc into major soc categories
+SOC_list<-tibble(SOC1=as.character(seq(11,53,by=2)),
+                 NAME=c("Management","Business and Financial Operations","Computer and Mathematical",
+                        "Architecture and Engineering","Life, Physical, and Social Science","Community and Social Service",
+                        "Legal","Education, Training, and Library","Arts, Design, Entertainment, Sports, and Media",
+                        "Healthcare Practitioners and Technical","Healthcare Support","Protective Service",
+                        "Food Preparation and Serving Related","Building and Grounds Cleaning and Maintenance",
+                        "Personal Care and Service","Sales and Related","Office and Administrative Support",
+                        "Farming, Fishing, and Forestry","Construction and Extraction",
+                        "Installation, Maintenance, and Repair","Production","Transportation and Material Moving"))
+
+SOC_h1b<-h1b%>%
+        mutate(SOC_CODE2=SOC_CODE)%>%
+        separate(SOC_CODE2, c("SOC1", "SOC2"), sep = "-")%>%
+        filter(!is.na(SOC1))%>%
+        mutate(month_submit=month(CASE_SUBMITTED),
+               month_start=month(EMPLOYMENT_START_DATE))%>%
+        select(SOC1,EMPLOYER_STATE,month_submit,month_start)
+```
+
+```{r}
+SOC_h1b%>%
+        left_join(SOC_list,by="SOC1")%>%
+        count(NAME)%>%
+        filter(!is.na(NAME))%>%
+        ggplot(aes(x=reorder(NAME,n),y=n))+
+        geom_col()+
+        coord_flip()+
+        labs(x = "Occupation Name", y="Number of petitions",title="Petition frequency based on occupation name")
+# bin less frequent occupation categories
+```
+
+```{r}
+SOC_h1b<-SOC_h1b%>%
+        left_join(SOC_list,by="SOC1")%>%
+        mutate(NAME2=ifelse(NAME %in% c("Computer and Mathematical","Business and Financial Operations",
+                                         "Architecture and Engineering","Management",
+                                         "Life, Physical, and Social Science","Healthcare Practitioners and Technical",
+                                         "Education, Training, and Library"), NAME, "Others"))%>%
+        select(-NAME)
+```
+
+```{r}
+# save for tableau
+state_soc<-SOC_h1b%>%
+        count(NAME2,EMPLOYER_STATE)%>%
+        filter(!is.na(EMPLOYER_STATE))
+write.csv(state_soc,"state_soc_h1b.csv", row.names = FALSE)
+```
+
+```{r}
+SOC_h1b%>%
+        count(NAME2)%>%
+        filter(!is.na(NAME2))%>%
+        ggplot(aes(x=reorder(NAME2,n),y=n))+
+        geom_col(fill="steelblue")+
+        geom_label(aes(label = n), color = "black", hjust =0.5) +
+        coord_flip()+
+        labs(x = "Occupation Name", y="Number of petitions",title="H1B petition frequency based on major occupations")
+ggsave("Major occupations H1B bar chart.jpeg",width=10, height=5)
+```
+
+```{r}
+SOC_h1b%>%
+        filter(!is.na(month_submit),!is.na(month_start))%>%
+        count(month_submit,NAME2)%>%
+        ggplot( ) + 
+        geom_col(aes(x=as.factor(month_submit),y=n,fill=NAME2),position="stack")+
+        guides(fill=guide_legend("Occupation name"))+
+        labs(x = "Month of submission", y="Number of petitions",title="Monthly trend of petition submission date")
+ggsave("Monthly trend of submission of each occupation.jpeg",width=10, height=5)
+```
+
+```{r}
+SOC_h1b%>%
+        filter(!is.na(month_submit),!is.na(month_start))%>%
+        count(month_start,NAME2)%>%
+        ggplot( ) + 
+        geom_col(aes(x=as.factor(month_start),y=n,fill=NAME2),position="stack")+
+        guides(fill=guide_legend("Occupation name"))+
+        labs(x = "Month of employment start", y="Number of petitions",title="Monthly trend of start employment date")
+ggsave("Monthly trend of start employment of each occupation.jpeg",width=10, height=5)
+```
+
+```{r}
+h1b%>%
+        filter(!is.na(EMPLOYMENT_START_DATE))%>%
+        mutate(Day_of_week=weekdays(as.Date(EMPLOYMENT_START_DATE)))%>%
+        count(Day_of_week)%>%
+        ggplot(aes(x=reorder(Day_of_week,n),y=n)) + 
+        geom_col(fill="steelblue")+
+        geom_label(aes(label = n), color = "black", hjust =0.5) +
+        labs(x = "Start employment weekday", y="Number of petitions",title="Weekday trend of start employment date")
+
+ggsave("Weekday trend of start employment.jpeg",width=10, height=5)
+```
+
+
+
